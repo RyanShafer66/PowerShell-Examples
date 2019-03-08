@@ -1,0 +1,86 @@
+#Requires -Modules ActiveDirectory
+function Clone-ADGroupMembership
+{
+[CmdletBinding(SupportsShouldProcess=$True, ConfirmImpact = 'Medium')]
+Param(
+    [Parameter(Mandatory = $True,
+    HelpMessage = "SamAccountName of the source user for cloning membership")]
+    # Make sure the user exists
+    [ValidateScript({$_ -in (Get-ADUser -Filter * | Select-Object -ExpandProperty SamAccountName)})]
+    [string]$sourceUser,
+    [Parameter(Mandatory = $True,
+    HelpMessage = "SamAccountName of the target user for cloning membership")]
+    # Make sure the user exists
+    [ValidateScript({$_ -in (Get-ADUser -Filter * | Select-Object -ExpandProperty SamAccountName)})]
+    [string]$targetUser
+)
+
+# Now we get the list of groups the sourceUser belongs to
+$sourceGroups = Get-ADPrincipalGroupMembership -Identity $sourceUser | Select-Object -ExpandProperty SamAccountName
+
+# We will also get a list of groups the target user belongs to
+$targetGroups = Get-ADPrincipalGroupMembership -Identity $targetUser | Select-Object -ExpandProperty SamAccountName
+
+# Check if the groupList is empty
+if (-not $sourceGroups)
+{
+    
+    # output message and return
+    Write-Host "$sourceUser is not a member of any AD groups!"
+    return
+}
+# We will loop through the groups and check if targetUser is a member already and if not add them using ShouldProcess for confirmation
+foreach ($sourceGroup in $sourceGroups)
+{
+    # Check if targetUser is already in the $group
+    if ($sourceGroup -in $targetGroups)
+    {
+        # Output that user is already in the group and continue
+        Write-Host "$targetUser is already in the $sourceGroup group continuing with no changes."
+        continue
+    }
+    # If the targetUser is not in the group but sourceUser is we will add $targetUser to $group
+    if ($sourceGroup -notin $targetGroups)
+    {
+        # Add the user to the group using ShouldProcess
+        if ($PSCmdlet.ShouldContinue("Adding $targetUser to AD group $sourceGroup are you sure?", "Adding User") )
+        {
+            # If the user agrees we will try to add the user to the group using try catch so we can catch errors
+            try
+            {
+                Add-ADPrincipalGroupMembership -Identity $targetUser -MemberOf $sourceGroup
+            }
+            catch
+            {
+                Write-Error "Failed to add $targetUser to AD group $sourceGroup"
+            }    
+        }
+        # If the user says no we continue to next group without doing anything
+        continue        
+    }
+}
+# We can reverse the process to remove groups that source is not in and target is, will not include ones we just added
+foreach ($targetGroup in $targetGroups)
+{
+    # If the sourceUser is not in the group but targetUser is we will remove targetUser from $group
+    if (($targetGroup -notin $sourceGroups) -and ($targetGroup -in $targetGroups))
+    {
+        
+        # Remove the targetUser from the group using ShouldProcess
+        if ($PSCmdlet.ShouldContinue("Removing $targetUser from AD group $targetGroup are you sure?", "Removing User") )
+        {
+            # If the user agrees we will try to remove the user from the group using try catch so we can catch errors 
+            try
+            {
+                Remove-ADPrincipalGroupMembership -Identity $targetUser -MemberOf $targetGroup -Confirm
+            }
+            catch
+            {
+                Write-Error "Failed to remove $targetUser from AD group $targetGroup"
+            }   
+        }
+        # If the user says no we continue to next group without doing anything
+        continue        
+    }
+}
+}
