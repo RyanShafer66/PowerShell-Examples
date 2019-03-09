@@ -1,0 +1,43 @@
+Function Get-USBDevices
+{
+[CmdletBinding()]
+Param(
+    # If function is unable to connect to $computername it will throw an error
+    [ValidateScript({Test-Connection -ComputerName $_ -ErrorAction SilentlyContinue})]
+    
+    # Default value will be the local computer
+    [string]$computer = $env:COMPUTERNAME
+)
+
+# We get the adapter configuration for all network adapaters
+$mac = Get-WmiObject win32_networkadapterconfiguration |
+
+# Then we filter results to only pass the network adapter with the IPAddress $computer resolves to
+Where-Object { $_.IPAddress -contains (Resolve-DnsName -Name $computer -DnsOnly).IPAddress } |
+
+# We only want the macaddress so we expand that property and the result is saved to $mac
+Select-Object -ExpandProperty macaddress
+
+# To get the USBDevices we need to get all the USB Controllers first
+$USBDevices = Get-WmiObject -Class Win32_USBControllerDevice |
+
+# We just want the Dependent as these represent the devices themselves
+ForEach-Object { 
+
+    [WMI]$_.Dependent | 
+    
+    Select-Object -Property Manufacturer, Name, DeviceID
+
+}
+
+# Let's create a custom object to return
+$object = New-Object -TypeName PSObject -Property @{
+    'Name' = $computer
+    'MAC Address' = $mac
+    'USB Devices' = $USBDevices
+}
+
+$object | Select-Object -Property 'Name', 'MAC Address', 'USB Devices' 
+}
+
+Get-USBDevices | ft -AutoSize
