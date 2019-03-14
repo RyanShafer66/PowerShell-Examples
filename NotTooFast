@@ -1,0 +1,43 @@
+function NotTooFast
+{
+param(
+    [ValidateScript({Test-Path -Path $_})]
+    [String]$logFile = "C:\scripts\Workbench\sample_log.txt"
+)
+# Standard regex to parse the lines
+$standardRegex = "^([\d-]+\s[\d:]{8}):\s([\d\.]+)\s(\w+)$"
+
+# Pattern for parsing the date
+$datePattern = "MM-dd HH:mm:ss"
+
+# Read the logFile into objects
+$logObjects = Get-ChildItem -Path $logFile |
+
+# Parse the lines with standardRegex
+Select-String -Pattern $standardRegex |
+
+# Use our match groups to make an object out of each line
+ForEach-Object {
+
+    # Assign the matches to variables
+    $date, $ip, $name = $_.Matches[0].Groups[1..3].Value
+
+    # Splat the variables to create an object
+    [PSCustomObject] @{
+        # Use ParseExact to convert the date string to a datetime object
+        Date = [DateTime]::ParseExact($date, $datePattern, $null)
+        IPAddress = $ip
+        Name = $name
+    }
+}
+
+# Use for loop to compare parts of the array
+for ($i=1;$i -lt $logObjects.length;$i++)
+{   
+    # Interval can be found like this
+    $interval = (New-TimeSpan -Start $logObjects[$i-1].Date -End $logObjects[$i].Date).TotalSeconds
+    
+    # Will return seconds between log entries but you can do anything you want
+    "{0:n2} Seconds" -f $interval 
+}
+}
