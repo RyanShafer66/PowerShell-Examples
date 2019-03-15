@@ -1,0 +1,64 @@
+function Get-LastWeeksLogs
+{
+    [CmdletBinding()]
+    Param(
+        [String]$ComputerName = $env:COMPUTERNAME,
+        [Parameter(Mandatory=$true)]
+        [ValidateScript(
+        {
+            # Check if Path exists
+            if( -Not ($_ | Test-Path) )
+            {
+                throw "File or directory does not exist"
+            }
+            # Make sure Path is a directory
+            if( -Not ($_ | Test-Path -PathType Container) )
+            {
+                throw "The Path must be a directory. Files paths are not allowed."
+            }
+            return $true
+        })]
+        [System.IO.FileInfo]$Path,
+        [String]$LogName = "Application"
+    )
+
+    # Get todays date at midnight
+    $date = Get-Date -Hour 0 -Minute 0 -Second 0
+
+    # Depending on what day of the week we run the script we will subtract a certain number of days to get to Sunday at midnight
+    $startDate = switch ($date.DayOfWeek)
+    {
+        "Friday" { $date.AddDays(-12) }
+        "Thursday" { $date.AddDays(-11) }
+        "Wednesday" { $date.AddDays(-10) }
+        "Tuesday" { $date.AddDays(-9) }
+        "Monday" { $date.AddDays(-8) }
+        "Sunday" { $date.AddDays(-7) }
+        "Saturday" { $date.AddDays(-6) }
+    }
+
+    # The end date is Friday at Midnight 5 days later than $startDate
+    $endDate = $startDate.AddDays(5)
+    
+    # Create a log directory based on the computername and date range
+    $logDirectory = "{0}_{1}_{2}" -f $ComputerName, $startDate.AddSeconds(1).ToString("MMdd"), $endDate.ToString("MMdd")
+    
+    # If it does not exist already create the new log directory
+    if ( -Not (Test-Path -Path (Join-Path -ChildPath $logDirectory -Path $Path)) )
+    {
+        $logPath = New-Item -Name $logDirectory -Path $Path -ItemType Directory
+    }
+    else
+    {
+        $logPath = (Join-Path -ChildPath $logDirectory -Path $Path)
+    }
+      
+    # Get the path for the output file
+    $logfilePath = (Join-Path -ChildPath $LogName -Path $logPath)
+        
+    # If the file already exists we will skip it
+    if ( -Not (Test-Path -Path $logfilePath) )
+    {
+        Get-EventLog -ComputerName $ComputerName -LogName $LogName -After $startDate -Before $endDate | Export-Clixml -Path $logfilePath
+    }
+}
