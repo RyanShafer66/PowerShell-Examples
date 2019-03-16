@@ -37,7 +37,10 @@ for ($i=1;$i -lt $logObjects.length;$i++)
     # Interval can be found like this
     $interval = (New-TimeSpan -Start $logObjects[$i-1].Date -End $logObjects[$i].Date).TotalSeconds
     
-    # Will return seconds between log entries but you can do anything you want
-    "{0:n2} Seconds" -f $interval 
+    # Add an interval property to the object
+    $logObjects[$i] | Add-Member -MemberType NoteProperty -Name Interval -Value ("{0:n2} Seconds" -f $interval)
+
+    # Return $logObject[$i]
+    $logObjects[$i]
 }
 }
